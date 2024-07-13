@@ -22,6 +22,7 @@ class StableDiffusion:
         self.tokenizer = SimpleTokenizer()
 
         text_encoder, diffusion_model, decoder, encoder = get_models(img_height, img_width, download_weights=download_weights)
+        # text_encoder == Clip Model
         self.text_encoder = text_encoder
         self.diffusion_model = diffusion_model
         self.decoder = decoder
@@ -42,74 +43,74 @@ class StableDiffusion:
         prompt,
         negative_prompt=None,
         batch_size=1,
-        num_steps=25,
+        num_steps=50,
         unconditional_guidance_scale=7.5,
         temperature=1,
         seed=None,
         input_image=None,
         input_mask=None,
         input_image_strength=0.5,
-    ):
-        # Tokenize prompt (i.e. starting context)
-        inputs = self.tokenizer.encode(prompt)
-        assert len(inputs) < 77, "Prompt is too long (should be < 77 tokens)"
-        phrase = inputs + [49407] * (77 - len(inputs))
+    ):  
+        print('\n')
+        print('\n')
+        print("------------------------------------------------------------------------")
+        # Tokenize prompt - Uses SimpleTokenizer
+        input_tokens = self.tokenizer.encode(prompt)
+        print("Tokenizing....")
+        print(f"tokenized_prompt_shape : {len(input_tokens)}")
+        print("------------------------------------------------------------------------")
+
+        # Checks whether the prompt text length is too long
+        assert len(input_tokens) < 77, "Prompt is too long (should be < 77 tokens)"
+
+        # Fills tokenized prompt list to 77, convert to numpy array, repeat to use batch
+        phrase = input_tokens + [49407] * (77 - len(input_tokens))
         phrase = np.array(phrase)[None].astype("int32")
         phrase = np.repeat(phrase, batch_size, axis=0)
+        print("Filling Tokens to match token length (77)....")
+        print(f"tokenized_phrase_shape : {phrase.shape}")
+        print("------------------------------------------------------------------------")
 
         # Encode prompt tokens (and their positions) into a "context vector"
         pos_ids = np.array(list(range(77)))[None].astype("int32")
         pos_ids = np.repeat(pos_ids, batch_size, axis=0)
+
+        # Predict using CLIP Model - context
         context = self.text_encoder.predict_on_batch([phrase, pos_ids])
-        
-        input_image_tensor = None
-        if input_image is not None:
-            if type(input_image) is str:
-                input_image = Image.open(input_image)
-                input_image = input_image.resize((self.img_width, self.img_height))
-
-            elif type(input_image) is np.ndarray:
-                input_image = np.resize(input_image, (self.img_height, self.img_width, input_image.shape[2]))
-                
-            input_image_array = np.array(input_image, dtype=np.float32)[None,...,:3]
-            input_image_tensor = tf.cast((input_image_array / 255.0) * 2 - 1, self.dtype)
-
-        if type(input_mask) is str:
-            input_mask = Image.open(input_mask)
-            input_mask = input_mask.resize((self.img_width, self.img_height))
-            input_mask_array = np.array(input_mask, dtype=np.float32)[None,...,None]
-            input_mask_array =  input_mask_array / 255.0
-            
-            latent_mask = input_mask.resize((self.img_width//8, self.img_height//8))
-            latent_mask = np.array(latent_mask, dtype=np.float32)[None,...,None]
-            latent_mask = 1 - (latent_mask.astype("float") / 255.0)
-            latent_mask_tensor = tf.cast(tf.repeat(latent_mask, batch_size , axis=0), self.dtype)
-
-
-        # Tokenize negative prompt or use default padding tokens
+        print("CLIP model context prediction...")
+        print(f"tokenized_context_shape : {context.shape}")
+        print("------------------------------------------------------------------------")
+ 
         unconditional_tokens = _UNCONDITIONAL_TOKENS
-        if negative_prompt is not None:
-            inputs = self.tokenizer.encode(negative_prompt)
-            assert len(inputs) < 77, "Negative prompt is too long (should be < 77 tokens)"
-            unconditional_tokens = inputs + [49407] * (77 - len(inputs))
-
-        # Encode unconditional tokens (and their positions into an
-        # "unconditional context vector"
         unconditional_tokens = np.array(unconditional_tokens)[None].astype("int32")
         unconditional_tokens = np.repeat(unconditional_tokens, batch_size, axis=0)
+
+        # Predict using CLIP Model - unconditional context
         unconditional_context = self.text_encoder.predict_on_batch(
             [unconditional_tokens, pos_ids]
         )
+        print("CLIP model uncoditionall context prediction...")
+        print(f"tokenized_unconditional_context_shape : {unconditional_tokens.shape}")
+        print("------------------------------------------------------------------------")
+
         timesteps = np.arange(1, 1000, 1000 // num_steps)
         input_img_noise_t = timesteps[ int(len(timesteps)*input_image_strength) ]
+
+        input_image_tensor = None
+
         latent, alphas, alphas_prev = self.get_starting_parameters(
             timesteps, batch_size, seed , input_image=input_image_tensor, input_img_noise_t=input_img_noise_t
         )
+        print("Getting starting params for diffusion process...")
+        starting_params = {"latent_shape": latent.shape, "alphas": alphas, "alpha_prev": alphas_prev}
+        print(f"Starting params : {starting_params}")
+        print("------------------------------------------------------------------------")
 
         if input_image is not None:
             timesteps = timesteps[: int(len(timesteps)*input_image_strength)]
 
-        # Diffusion stage
+        print("Diffusion model...")
+        
         progbar = tqdm(list(enumerate(timesteps))[::-1])
         for index, timestep in progbar:
             progbar.set_description(f"{index:3d} {timestep:3d}")
@@ -126,21 +127,13 @@ class StableDiffusion:
                 latent, e_t, index, a_t, a_prev, temperature, seed
             )
 
-            if input_mask is not None and input_image is not None:
-                # If mask is provided, noise at current timestep will be added to input image.
-                # The intermediate latent will be merged with input latent.
-                latent_orgin, alphas, alphas_prev = self.get_starting_parameters(
-                    timesteps, batch_size, seed , input_image=input_image_tensor, input_img_noise_t=timestep
-                )
-                latent = latent_orgin * latent_mask_tensor + latent * (1- latent_mask_tensor)
+        print(f"latent_shape: {latent.shape}")
+        print("------------------------------------------------------------------------")
 
-        # Decoding stage
+        print("Decoding...")
         decoded = self.decoder.predict_on_batch(latent)
         decoded = ((decoded + 1) / 2) * 255
-
-        if input_mask is not None:
-          # Merge inpainting output with original image
-          decoded = input_image_array * (1-input_mask_array) + np.array(decoded) * input_mask_array
+        print("------------------------------------------------------------------------")
 
         return np.clip(decoded, 0, 255).astype("uint8")
 

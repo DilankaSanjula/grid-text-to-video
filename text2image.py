@@ -11,7 +11,7 @@ parser.add_argument(
     "--prompt",
     type=str,
     nargs="?",
-    default="a painting of a virus monster playing guitar",
+    default="A human baby inside an egg",
     help="the prompt to render",
 )
 
@@ -83,6 +83,7 @@ img = generator.generate(
     batch_size=1,
     seed=args.seed,
 )
+
 pnginfo = PngInfo()
 pnginfo.add_text('prompt', args.prompt)
 Image.fromarray(img[0]).save(args.output, pnginfo=pnginfo)
