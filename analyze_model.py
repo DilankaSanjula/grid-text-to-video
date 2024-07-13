@@ -9,7 +9,7 @@ img_width = 512
 MAX_TEXT_LEN = 77  # Define MAX_TEXT_LEN according to your dataset
 
 text_encoder, diffusion_model, decoder, encoder = get_models(img_height, img_width)
-plot_model(diffusion_model, to_file = 'test.png', show_shapes=True)
+
 # Print the summary of each model
 print("Text Encoder Model Summary:")
 text_encoder.summary()
