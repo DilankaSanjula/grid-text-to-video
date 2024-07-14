@@ -11,7 +11,7 @@ parser.add_argument(
     "--prompt",
     type=str,
     nargs="?",
-    default="A human baby inside an egg",
+    default="A realistic portrait of a prince",
     help="the prompt to render",
 )
 
@@ -51,7 +51,7 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--steps", type=int, default=5, help="number of ddim sampling steps"
+    "--steps", type=int, default=20, help="number of ddim sampling steps"
 )
 
 parser.add_argument(
