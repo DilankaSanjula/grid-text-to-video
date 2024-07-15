@@ -6,3 +6,9 @@ dataset/MSRVTT/*
 
 dataset/train_video_to_images/*
 dataset/test_video_to_images/*
+
+webvid-10m/*
+webvid10m_dataset/webvid-10m/*
+
+webvid10m_dataset/4x4_grid_images/*
+webvid10m_dataset/resized_videos/*

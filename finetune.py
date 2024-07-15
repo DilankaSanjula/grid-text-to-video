@@ -7,7 +7,13 @@ img_height = 512
 img_width = 512
 
 text_encoder, diffusion_model, decoder, encoder = get_models(img_height, img_width)
-#train_dataset, 
+
+for layer in text_encoder.layers:
+    layer.trainable = False
+for layer in diffusion_model.layers:
+    layer.trainable = False
+for layer in encoder.layers:
+    layer.trainable = False
 
 def fine_tune(epochs, learning_rate):
 
@@ -17,6 +23,7 @@ def fine_tune(epochs, learning_rate):
         decoder.compile(optimizer=optimizer, loss='mse')
         encoder.compile(optimizer=optimizer, loss='mse')
         
+        diffusion_model.summary()
         print("Starting fine-tuning")
         
         for epoch in range(epochs):
@@ -25,34 +32,38 @@ def fine_tune(epochs, learning_rate):
                 with tf.GradientTape(persistent=True) as tape:
                     # Tokenize captions
                     tokens = [self.tokenizer.encode(c) + [49407] * (self.max_text_len - len(self.tokenizer.encode(c))) for c in captions]
-                    tokens = np.array(tokens).astype("int32")
+#                     tokens = np.array(tokens).astype("int32")
 
-                    # Forward pass through the models
-                    encoded_text = self.text_encoder(tokens)
-                    latents = self.encoder(images)
-                    predicted_latents = self.diffusion_model([latents, encoded_text])
-                    decoded_images = self.decoder(predicted_latents)
+#                     # Forward pass through the models
+#                     encoded_text = self.text_encoder(tokens)
+#                     latents = self.encoder(images)
+#                     predicted_latents = self.diffusion_model([latents, encoded_text])
+#                     decoded_images = self.decoder(predicted_latents)
 
-                    # Calculate loss
-                    loss = tf.reduce_mean(tf.square(images - decoded_images))
+#                     # Calculate loss
+#                     loss = tf.reduce_mean(tf.square(images - decoded_images))
 
-                # Apply gradients
-                gradients = tape.gradient(loss, self.text_encoder.trainable_variables)
-                optimizer.apply_gradients(zip(gradients, self.text_encoder.trainable_variables))
+#                 # Apply gradients
+#                 gradients = tape.gradient(loss, self.text_encoder.trainable_variables)
+#                 optimizer.apply_gradients(zip(gradients, self.text_encoder.trainable_variables))
 
-                gradients = tape.gradient(loss, self.diffusion_model.trainable_variables)
-                optimizer.apply_gradients(zip(gradients, self.diffusion_model.trainable_variables))
+#                 gradients = tape.gradient(loss, self.diffusion_model.trainable_variables)
+#                 optimizer.apply_gradients(zip(gradients, self.diffusion_model.trainable_variables))
 
-                gradients = tape.gradient(loss, self.decoder.trainable_variables)
-                optimizer.apply_gradients(zip(gradients, self.decoder.trainable_variables))
+#                 gradients = tape.gradient(loss, self.decoder.trainable_variables)
+#                 optimizer.apply_gradients(zip(gradients, self.decoder.trainable_variables))
 
-                gradients = tape.gradient(loss, self.encoder.trainable_variables)
-                optimizer.apply_gradients(zip(gradients, self.encoder.trainable_variables))
+#                 gradients = tape.gradient(loss, self.encoder.trainable_variables)
+#                 optimizer.apply_gradients(zip(gradients, self.encoder.trainable_variables))
 
-                if step % 100 == 0:
-                    print(f"Step {step}: Loss = {loss.numpy()}")
+#                 if step % 100 == 0:
+#                     print(f"Step {step}: Loss = {loss.numpy()}")
 
-            print(f"Epoch {epoch + 1} completed. Loss = {loss.numpy()}")
+#             print(f"Epoch {epoch + 1} completed. Loss = {loss.numpy()}")
 
+# Freeze the encoder, diffusion_model, and text_encoder
+freeze_model(encoder)
+freeze_model(diffusion_model)
+freeze_model(text_encoder)
 
-fine_tune(epochs=1, learning_rate=1e-4)
+fine_tune(epochs=10, learning_rate=1e-4)
