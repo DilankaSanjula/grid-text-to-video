@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from tqdm import tqdm
 import math
@@ -34,7 +35,8 @@ class StableDiffusion:
             self.decoder.compile(jit_compile=True)
             self.encoder.compile(jit_compile=True)
 
-        self.dtype = tf.float32
+        self.dtype = tf.float16
+        #self.dtype = tf.float32
         if tf.keras.mixed_precision.global_policy().name == 'mixed_float16':
             self.dtype = tf.float16
 
@@ -213,6 +215,84 @@ class StableDiffusion:
             print("Loaded %d weights for %s"%(len(module_weights) , module_name))
 
 
+    def fine_tune(self, epochs, learning_rate, train_dataset, batch_size=1, num_steps=5):
+
+        # Freeze the text encoder, diffusion model, and encoder
+        for layer in self.text_encoder.layers:
+            layer.trainable = False
+        for layer in self.diffusion_model.layers:
+            layer.trainable = False
+        for layer in self.encoder.layers:
+            layer.trainable = False
+        for layer in self.diffusion_model.layers[:-2]:
+            layer.trainable = False
+        for layer in self.diffusion_model.layers[-2:]:
+            layer.trainable = True
+
+        self.diffusion_model.summary()
+
+        optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
+        mse_loss = keras.losses.MeanSquaredError()
+        print("Starting fine-tuning")
+
+        for epoch in range(epochs):
+            print(f"Epoch {epoch + 1}/{epochs}")
+            for step, (images, captions) in enumerate(train_dataset):
+                with tf.GradientTape() as tape:
+                    # Encode the captions
+                    input_tokens = [self.tokenizer.encode(caption.numpy().decode('utf-8')) for caption in captions]
+                    input_tokens = keras.preprocessing.sequence.pad_sequences(input_tokens, maxlen=MAX_TEXT_LEN, padding='post')
+                    input_tokens = np.array(input_tokens)
+                    pos_ids = np.array(list(range(77)))[None].astype("int32")
+                    pos_ids = np.repeat(pos_ids, batch_size, axis=0)
+
+                    context = self.text_encoder([input_tokens, pos_ids], training=True)
+
+                    # Generate latent representations of the input images using the encoder
+                    latent = self.encoder(images, training=True)
+
+                    # Generate the timestep embeddings (t_emb) for the current step
+                    timesteps = np.arange(1, 1000, 1000 // num_steps)
+                    input_img_noise_t = timesteps[int(len(timesteps) * 0.5)]
+
+                    latent, alphas, alphas_prev = self.get_starting_parameters(
+                        timesteps, batch_size, None, input_image=None, input_img_noise_t=input_img_noise_t
+                    )
+                    print("ok")
+
+                    # Diffusion process (multiple steps)
+                    progbar = tqdm(list(enumerate(timesteps))[::-1])
+                    
+                    for index, timestep in progbar:
+                        print("test")
+                        progbar.set_description(f"{index:3d} {timestep:3d}")
+                        timesteps = np.array([timestep])
+                        t_emb = self.timestep_embedding(timesteps)
+                        t_emb = np.repeat(t_emb, batch_size, axis=0)
+
+                        unconditional_latent = self.diffusion_model([latent, t_emb, context], training=True)
+                        latent = self.diffusion_model([latent, t_emb, context], training=True)
+                        e_t = unconditional_latent + 1.0 * (latent - unconditional_latent)
+                        a_t, a_prev = alphas[index], alphas_prev[index]
+                        latent, pred_x0 = self.get_x_prev_and_pred_x0(
+                            latent, e_t, index, a_t, a_prev, 1.0, None
+                        )
+
+                    outputs = self.decoder(latent, training=True)
+                    loss = mse_loss(images, outputs)
+
+                # Backward pass and optimization
+                gradients = tape.gradient(loss, self.decoder.trainable_variables)
+                optimizer.apply_gradients(zip(gradients, self.decoder.trainable_variables))
+
+                if step % 10 == 0:
+                    print(f"Step {step}, Loss: {tf.reduce_mean(loss).numpy()}")
+
+        print("Fine-tuning complete")
+
+
+
+
 def get_models(img_height, img_width, download_weights=True):
     n_h = img_height // 8
     n_w = img_width // 8
@@ -264,4 +344,18 @@ def get_models(img_height, img_width, download_weights=True):
         diffusion_model.load_weights(diffusion_model_weights_fpath)
         decoder.load_weights(decoder_weights_fpath)
         encoder.load_weights(encoder_weights_fpath)
+
+
+    else:
+        # Load weights from local directory
+        local_weights_dir = 'models'
+        text_encoder_weights_fpath = os.path.join(local_weights_dir, 'text_encoder.h5')
+        diffusion_model_weights_fpath = os.path.join(local_weights_dir, 'diffusion_model.h5')
+        decoder_weights_fpath = os.path.join(local_weights_dir, 'decoder.h5')
+        encoder_weights_fpath = os.path.join(local_weights_dir, 'encoder_newW.h5')
+
+        # Ensure that all weight files exist in the local directory
+        for weight_file in [text_encoder_weights_fpath, diffusion_model_weights_fpath, decoder_weights_fpath, encoder_weights_fpath]:
+            if not os.path.exists(weight_file):
+                raise FileNotFoundError(f"Weight file {weight_file} not found in {local_weights_dir}")
     return text_encoder, diffusion_model, decoder , encoder

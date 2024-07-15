@@ -12,3 +12,5 @@ webvid10m_dataset/webvid-10m/*
 
 webvid10m_dataset/4x4_grid_images/*
 webvid10m_dataset/resized_videos/*
+
+models/*
