@@ -224,12 +224,8 @@ class StableDiffusion:
             layer.trainable = False
         for layer in self.encoder.layers:
             layer.trainable = False
-        for layer in self.diffusion_model.layers[:-2]:
-            layer.trainable = False
-        for layer in self.diffusion_model.layers[-2:]:
-            layer.trainable = True
 
-        self.diffusion_model.summary()
+        self.decoder.summary()
 
         optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
         mse_loss = keras.losses.MeanSquaredError()
