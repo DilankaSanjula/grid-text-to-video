@@ -348,7 +348,12 @@ def get_models(img_height, img_width, download_weights=True):
 
     else:
         # Load weights from local directory
-        local_weights_dir = 'models'
+        if os.path.exits('models'):
+            local_weights_dir = 'models'
+
+        if os.path.exits('/content/drive/MyDrive/4x4_grid_images'):
+            local_weights_dir = '/content/drive/MyDrive/4x4_grid_images'
+            
         text_encoder_weights_fpath = os.path.join(local_weights_dir, 'text_encoder.h5')
         diffusion_model_weights_fpath = os.path.join(local_weights_dir, 'diffusion_model.h5')
         decoder_weights_fpath = os.path.join(local_weights_dir, 'decoder.h5')
