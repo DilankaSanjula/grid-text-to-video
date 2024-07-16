@@ -46,7 +46,6 @@ batch_size = 1
 num_steps = 50
 
 
-
 dataset_path = '/content/drive/MyDrive/4x4_grid_images'
 train_dataset = load_dataset(dataset_path, batch_size=batch_size)
 
