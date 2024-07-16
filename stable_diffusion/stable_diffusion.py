@@ -351,8 +351,8 @@ def get_models(img_height, img_width, download_weights=True):
         if os.path.exists('models'):
             local_weights_dir = 'models'
 
-        if os.path.exists('/content/drive/MyDrive/4x4_grid_images'):
-            local_weights_dir = '/content/drive/MyDrive/4x4_grid_images'
+        if os.path.exists('/content/drive/models'):
+            local_weights_dir = '/content/drive/models'
             
         text_encoder_weights_fpath = os.path.join(local_weights_dir, 'text_encoder.h5')
         diffusion_model_weights_fpath = os.path.join(local_weights_dir, 'diffusion_model.h5')
