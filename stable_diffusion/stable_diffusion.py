@@ -5,7 +5,7 @@ import math
 
 import tensorflow as tf
 from tensorflow import keras
-
+from tensorflow.keras import mixed_precision
 from .autoencoder_kl import Decoder, Encoder
 from .diffusion_model import UNetModel
 from .clip_encoder import CLIPTextTransformer
@@ -14,7 +14,7 @@ from .constants import _UNCONDITIONAL_TOKENS, _ALPHAS_CUMPROD, PYTORCH_CKPT_MAPP
 from PIL import Image
 
 MAX_TEXT_LEN = 77
-
+mixed_precision.set_global_policy('mixed_float16')
 
 class StableDiffusion:
     def __init__(self, img_height=1000, img_width=1000, jit_compile=False, download_weights=True):
