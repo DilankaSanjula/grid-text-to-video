@@ -22,10 +22,17 @@ def load_and_preprocess_image(file_path):
 def load_dataset(dataset_path):
     def parse_function(file_path):
         image = load_and_preprocess_image(file_path)
-        caption = tf.strings.split(tf.strings.regex_replace(file_path, dataset_path + '/', ''), '.')[0]
+        prefix_length = len(dataset_path) + 1  # +1 to remove the trailing slash
+        caption = tf.strings.substr(file_path, prefix_length, -1)  # Remove the prefix
+        caption = tf.strings.split(caption, '.')[0]  # Remove file extension
+        caption = tf.strings.regex_replace(caption, '_', ' ')  # Replace underscores with spaces
         return image, caption
 
-    dataset = tf.data.Dataset.list_files(dataset_path + '/*.jpg')
+    # List files in sorted order
+    file_paths = tf.io.gfile.glob(dataset_path + '/*.jpg')
+    file_paths = sorted(file_paths)
+
+    dataset = tf.data.Dataset.from_tensor_slices(file_paths)
     dataset = dataset.map(parse_function, num_parallel_calls=tf.data.AUTOTUNE)
     dataset = dataset.prefetch(tf.data.AUTOTUNE)
     return dataset
@@ -48,5 +55,7 @@ num_steps = 10
 dataset_path = '/content/drive/MyDrive/4x4_grid_images'
 train_dataset = load_dataset(dataset_path)
 
-trainer = StableDiffusion(img_height, img_width, jit_compile=False, download_weights=False)
-trainer.fine_tune(epochs, learning_rate, train_dataset, batch_size, num_steps=10)
+print(train_dataset[0])
+
+# trainer = StableDiffusion(img_height, img_width, jit_compile=False, download_weights=False)
+# trainer.fine_tune(epochs, learning_rate, train_dataset, batch_size, num_steps=10)
