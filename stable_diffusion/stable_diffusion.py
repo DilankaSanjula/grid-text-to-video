@@ -244,7 +244,7 @@ class StableDiffusion:
 
             for step, (images, captions) in enumerate(train_dataset.batch(batch_size)):
                 print(step)
-                
+
                 # Ensure captions are strings
                 captions = [caption.numpy().decode('utf-8') if isinstance(caption.numpy(), bytes) else str(caption.numpy()) for caption in captions]
 
@@ -387,6 +387,8 @@ class StableDiffusion:
             print(f"Models saved: {encoder_save_path}, {decoder_save_path}")
 
         print("Fine-tuning complete")
+
+
 
 
 
