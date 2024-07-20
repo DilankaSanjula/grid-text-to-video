@@ -216,7 +216,7 @@ class StableDiffusion:
 
 
 
-    def fine_tune(self, epochs, learning_rate, train_dataset, batch_size, num_steps=5, accumulation_steps=4):
+    def fine_tune(self, epochs, learning_rate, train_dataset, batch_size, num_steps, accumulation_steps=4):
         print("batch_size", batch_size)
         # Set mixed precision policy
         mixed_precision.set_global_policy('mixed_float16')
