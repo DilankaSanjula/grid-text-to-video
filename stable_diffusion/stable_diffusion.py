@@ -224,10 +224,10 @@ class StableDiffusion:
         # Freeze the text encoder, diffusion model, and encoder
         self.text_encoder.trainable = False
         self.diffusion_model.trainable = False
-        self.encoder.trainable = True
+        self.encoder.trainable = False
 
-        self.decoder.trainable = True
-        self.decoder.summary()
+        self.decoder.trainable = False
+        self.diffusion_model.summary()
 
         optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
         mse_loss = keras.losses.MeanSquaredError()
