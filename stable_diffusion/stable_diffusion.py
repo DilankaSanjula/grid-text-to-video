@@ -215,8 +215,7 @@ class StableDiffusion:
             print("Loaded %d weights for %s"%(len(module_weights) , module_name))
 
 
-
-    def fine_tune(self, epochs, learning_rate, train_dataset, batch_size, num_steps, accumulation_steps=8):
+    def fine_tune(self, epochs, learning_rate, train_dataset, batch_size=1, num_steps=50, accumulation_steps=8):
         print("batch_size", batch_size)
         # Set mixed precision policy
         mixed_precision.set_global_policy('mixed_float16')
@@ -225,11 +224,14 @@ class StableDiffusion:
         self.text_encoder.trainable = False
         self.diffusion_model.trainable = False
         self.encoder.trainable = False
-
         self.decoder.trainable = False
-        self.diffusion_model.summary()
 
-        optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
+        self.decoder.summary()
+
+        optimizer = mixed_precision.LossScaleOptimizer(
+            keras.optimizers.Adam(learning_rate=learning_rate),
+            dynamic=True
+        )
         mse_loss = keras.losses.MeanSquaredError()
 
         print("Starting fine-tuning")
@@ -253,9 +255,9 @@ class StableDiffusion:
                     pos_ids = np.array(list(range(MAX_TEXT_LEN)))[None].astype("int32")
                     pos_ids = np.repeat(pos_ids, batch_size, axis=0)
 
-                    context = self.text_encoder([input_tokens, pos_ids], training=True)
+                    context = self.text_encoder.predict([input_tokens, pos_ids])
 
-                     # Ensure the shape is compatible before reshaping
+                    # Ensure the shape is compatible before reshaping
                     expected_shape = (batch_size, self.img_height, self.img_width, 3)
                     if images.shape[1:] != expected_shape[1:]:
                         raise ValueError(f"Unexpected image shape {images.shape}, expected {expected_shape}")
@@ -266,7 +268,7 @@ class StableDiffusion:
 
                     # Time the encoder inference step
                     start_time = time.time()
-                    latent = self.encoder(images, training=False)
+                    latent = self.encoder.predict(images)
                     end_time = time.time()
                     print(f"Encoder Inference Time: {end_time - start_time} seconds")
 
@@ -278,12 +280,12 @@ class StableDiffusion:
                     start_time = time.time()
                     # Diffusion process (multiple steps)
                     for index, timestep in enumerate(timesteps[::-1]):
-                        print("Diffusion steps",index)
+                        print("Diffusion steps", index)
                         t_emb = self.timestep_embedding(np.array([timestep]))
                         t_emb = np.repeat(t_emb, batch_size, axis=0)
 
-                        unconditional_latent = self.diffusion_model([latent, t_emb, context], training=False)
-                        latent = self.diffusion_model([latent, t_emb, context], training=False)
+                        unconditional_latent = self.diffusion_model.predict([latent, t_emb, context])
+                        latent = self.diffusion_model.predict([latent, t_emb, context])
                         e_t = unconditional_latent + 1.0 * (latent - unconditional_latent)
                         a_t, a_prev = alphas[index], alphas_prev[index]
                         latent, pred_x0 = self.get_x_prev_and_pred_x0(latent, e_t, index, a_t, a_prev, 1.0, None)
@@ -291,17 +293,19 @@ class StableDiffusion:
                     end_time = time.time()
                     print(f"Diffusion Inference Time: {end_time - start_time} seconds")
 
-                    outputs = self.decoder(latent, training=True)
+                    outputs = self.decoder.predict(latent)
                     loss = mse_loss(images, outputs) / accumulation_steps  # Scale loss
-                    
+
                     print(loss)
-                    
-                gradients = tape.gradient(loss, self.decoder.trainable_variables)
+
+                scaled_loss = optimizer.get_scaled_loss(loss)
+                gradients = tape.gradient(scaled_loss, self.decoder.trainable_variables)
+                scaled_gradients = optimizer.get_unscaled_gradients(gradients)
 
                 if accumulated_gradients is None:
-                    accumulated_gradients = gradients
+                    accumulated_gradients = scaled_gradients
                 else:
-                    accumulated_gradients = [accumulated_gradients[i] + gradients[i] for i in range(len(gradients))]
+                    accumulated_gradients = [accumulated_gradients[i] + scaled_gradients[i] for i in range(len(scaled_gradients))]
 
                 accumulated_loss += loss
 
@@ -310,19 +314,27 @@ class StableDiffusion:
                     accumulated_gradients = None
                     accumulated_loss = 0
 
-                if step % 50 == 0:
-                    if os.path.exists('models'):
-                        local_weights_dir = 'models'
-                    if os.path.exists('/content/drive/MyDrive/models'):
-                        local_weights_dir = '/content/drive/MyDrive/models'
+                if step % 10 == 0:
+                    print(f"Step {step}, Loss: {tf.reduce_mean(loss).numpy()}")
 
-                    encoder_save_path = os.path.join(local_weights_dir, f'encoder_epoch_{epoch + 1}_step_{step + 1}.h5')
-                    decoder_save_path = os.path.join(local_weights_dir, f'decoder_epoch_{epoch + 1}_step_{step + 1}.h5')
+                if step % 500 == 0:
+                    os.makedirs('models', exist_ok=True)
+                    encoder_save_path = os.path.join('models', f'encoder_epoch_{epoch + 1}_step_{step + 1}.h5')
+                    decoder_save_path = os.path.join('models', f'decoder_epoch_{epoch + 1}_step_{step + 1}.h5')
 
                     print(f"Step {step}, Loss: {tf.reduce_mean(loss).numpy()}")
 
                     self.encoder.save(encoder_save_path)
                     self.decoder.save(decoder_save_path)
+
+        # Save the encoder and decoder models at the end of each epoch
+        os.makedirs('models', exist_ok=True)
+        encoder_save_path = os.path.join('models', f'encoder_epoch_{epoch + 1}.h5')
+        decoder_save_path = os.path.join('models', f'decoder_epoch_{epoch + 1}.h5')
+
+        self.encoder.save(encoder_save_path)
+        self.decoder.save(decoder_save_path)
+        print(f"Models saved: {encoder_save_path}, {decoder_save_path}")
 
         print("Fine-tuning complete")
 
