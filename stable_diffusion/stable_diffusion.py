@@ -295,6 +295,8 @@ class StableDiffusion:
 
                     outputs = self.decoder.predict(latent)
                     loss = mse_loss(images, outputs) / accumulation_steps  # Scale loss
+                    print(loss)
+                    loss = tf.stop_gradient(loss)
 
                     print(loss)
 
