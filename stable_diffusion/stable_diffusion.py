@@ -298,10 +298,23 @@ class StableDiffusion:
 
                     # Perform diffusion model inference outside the gradient tape
                     unconditional_latent = self.diffusion_model.predict([latent, t_emb, context])
+                    if tf.reduce_any(tf.math.is_nan(unconditional_latent)) or tf.reduce_any(tf.math.is_inf(unconditional_latent)):
+                        print(f"NaN or Inf found in unconditional_latent at step {step}, index {index}, skipping.")
+                        break
+
                     latent = self.diffusion_model.predict([latent, t_emb, context])
+                    if tf.reduce_any(tf.math.is_nan(latent)) or tf.reduce_any(tf.math.is_inf(latent)):
+                        print(f"NaN or Inf found in latent during diffusion steps at step {step}, index {index}, skipping.")
+                        break
+
                     e_t = unconditional_latent + 1.0 * (latent - unconditional_latent)
                     a_t, a_prev = alphas[index], alphas_prev[index]
                     latent, pred_x0 = self.get_x_prev_and_pred_x0(latent, e_t, index, a_t, a_prev, 1.0, None)
+
+                    # Check for NaN or Inf in latent during diffusion steps
+                    if tf.reduce_any(tf.math.is_nan(latent)) or tf.reduce_any(tf.math.is_inf(latent)):
+                        print(f"NaN or Inf found in latent during diffusion steps at step {step}, index {index}, skipping.")
+                        break
 
                 end_time = time.time()
                 print(f"Diffusion Inference Time: {end_time - start_time} seconds")
@@ -315,8 +328,8 @@ class StableDiffusion:
 
                 print(f"Loss at step {step}: {loss}")
 
-                if tf.math.is_nan(loss):
-                    print(f"Loss is NaN at step {step}, skipping gradient update.")
+                if tf.math.is_nan(loss) or tf.math.is_inf(loss):
+                    print(f"Loss is NaN or Inf at step {step}, skipping gradient update.")
                     continue
 
                 scaled_loss = optimizer.get_scaled_loss(loss)
@@ -365,9 +378,6 @@ class StableDiffusion:
             print(f"Models saved: {encoder_save_path}, {decoder_save_path}")
 
         print("Fine-tuning complete")
-
-
-
 
 
 
