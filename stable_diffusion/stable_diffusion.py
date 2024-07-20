@@ -268,11 +268,21 @@ class StableDiffusion:
                 images = tf.reshape(images, expected_shape)
                 print(f"Images shape after reshaping: {images.shape}")
 
+                # Check for NaN or Inf in images
+                if tf.reduce_any(tf.math.is_nan(images)) or tf.reduce_any(tf.math.is_inf(images)):
+                    print(f"NaN or Inf found in images at step {step}, skipping.")
+                    continue
+
                 # Perform encoder inference outside the gradient tape
                 start_time = time.time()
                 latent = self.encoder.predict(images)
                 end_time = time.time()
                 print(f"Encoder Inference Time: {end_time - start_time} seconds")
+
+                # Check for NaN or Inf in latent
+                if tf.reduce_any(tf.math.is_nan(latent)) or tf.reduce_any(tf.math.is_inf(latent)):
+                    print(f"NaN or Inf found in latent at step {step}, skipping.")
+                    continue
 
                 # Generate the timestep embeddings (t_emb) for the current step
                 timesteps = np.arange(1, 1000, 1000 // num_steps)
@@ -355,6 +365,7 @@ class StableDiffusion:
             print(f"Models saved: {encoder_save_path}, {decoder_save_path}")
 
         print("Fine-tuning complete")
+
 
 
 
