@@ -303,7 +303,7 @@ class StableDiffusion:
                     outputs = self.decoder(latent, training=True)
                     loss = mse_loss(images, outputs) / accumulation_steps  # Scale loss
 
-                print(loss)
+                print(f"Loss at step {step}: {loss}")
 
                 if tf.math.is_nan(loss):
                     print(f"Loss is NaN at step {step}, skipping gradient update.")
@@ -312,6 +312,9 @@ class StableDiffusion:
                 scaled_loss = optimizer.get_scaled_loss(loss)
                 gradients = tape.gradient(scaled_loss, self.encoder.trainable_variables + self.decoder.trainable_variables)
                 scaled_gradients = optimizer.get_unscaled_gradients(gradients)
+
+                # Clip gradients to avoid exploding gradients
+                scaled_gradients = [tf.clip_by_value(grad, -1.0, 1.0) if grad is not None else None for grad in scaled_gradients]
 
                 if any(g is None for g in scaled_gradients):
                     print(f"Found None gradients at step {step}, skipping gradient update.")
@@ -352,6 +355,7 @@ class StableDiffusion:
             print(f"Models saved: {encoder_save_path}, {decoder_save_path}")
 
         print("Fine-tuning complete")
+
 
 
 
