@@ -244,71 +244,79 @@ class StableDiffusion:
 
             for step, (images, captions) in enumerate(train_dataset.batch(batch_size)):
                 print(step)
-                # Ensure captions are strings
-                captions = [caption.numpy().decode('utf-8') if isinstance(caption.numpy(), bytes) else str(caption.numpy()) for caption in captions]
-
-                # Tokenize and pad the captions
-                input_tokens = [self.tokenizer.encode(caption) for caption in captions]
-                input_tokens = keras.preprocessing.sequence.pad_sequences(input_tokens, maxlen=MAX_TEXT_LEN, padding='post')
-                input_tokens = np.array(input_tokens)
-
-                pos_ids = np.array(list(range(MAX_TEXT_LEN)))[None].astype("int32")
-                pos_ids = np.repeat(pos_ids, batch_size, axis=0)
-
-                # Perform inference outside the gradient tape
-                context = self.text_encoder.predict([input_tokens, pos_ids])
-
-                # Ensure the shape is compatible before reshaping
-                expected_shape = (batch_size, self.img_height, self.img_width, 3)
-                if images.shape[1:] != expected_shape[1:]:
-                    raise ValueError(f"Unexpected image shape {images.shape}, expected {expected_shape}")
-
-                # Reshape images to match the expected input shape of the encoder
-                images = tf.reshape(images, expected_shape)
-                print(f"Images shape after reshaping: {images.shape}")
-
-                # Perform encoder inference outside the gradient tape
-                start_time = time.time()
-                latent = self.encoder.predict(images)
-                end_time = time.time()
-                print(f"Encoder Inference Time: {end_time - start_time} seconds")
-
-                # Generate the timestep embeddings (t_emb) for the current step
-                timesteps = np.arange(1, 1000, 1000 // num_steps)
-                input_img_noise_t = timesteps[int(len(timesteps) * 0.5)]
-                latent, alphas, alphas_prev = self.get_starting_parameters(timesteps, batch_size, None, input_image=None, input_img_noise_t=input_img_noise_t)
-
-                start_time = time.time()
-                # Diffusion process (multiple steps)
-                for index, timestep in enumerate(timesteps[::-1]):
-                    print("Diffusion steps", index)
-                    t_emb = self.timestep_embedding(np.array([timestep]))
-                    t_emb = np.repeat(t_emb, batch_size, axis=0)
-
-                    # Perform diffusion model inference outside the gradient tape
-                    unconditional_latent = self.diffusion_model.predict([latent, t_emb, context])
-                    latent = self.diffusion_model.predict([latent, t_emb, context])
-                    e_t = unconditional_latent + 1.0 * (latent - unconditional_latent)
-                    a_t, a_prev = alphas[index], alphas_prev[index]
-                    latent, pred_x0 = self.get_x_prev_and_pred_x0(latent, e_t, index, a_t, a_prev, 1.0, None)
-
-                end_time = time.time()
-                print(f"Diffusion Inference Time: {end_time - start_time} seconds")
-
                 with tf.GradientTape() as tape:
+                    # Ensure captions are strings
+                    captions = [caption.numpy().decode('utf-8') if isinstance(caption.numpy(), bytes) else str(caption.numpy()) for caption in captions]
+
+                    # Tokenize and pad the captions
+                    input_tokens = [self.tokenizer.encode(caption) for caption in captions]
+                    input_tokens = keras.preprocessing.sequence.pad_sequences(input_tokens, maxlen=MAX_TEXT_LEN, padding='post')
+                    input_tokens = np.array(input_tokens)
+
+                    pos_ids = np.array(list(range(MAX_TEXT_LEN)))[None].astype("int32")
+                    pos_ids = np.repeat(pos_ids, batch_size, axis=0)
+
+                    # Perform inference outside the gradient tape
+                    context = self.text_encoder.predict([input_tokens, pos_ids])
+
+                    # Ensure the shape is compatible before reshaping
+                    expected_shape = (batch_size, self.img_height, self.img_width, 3)
+                    if images.shape[1:] != expected_shape[1:]:
+                        raise ValueError(f"Unexpected image shape {images.shape}, expected {expected_shape}")
+
+                    # Reshape images to match the expected input shape of the encoder
+                    images = tf.reshape(images, expected_shape)
+                    print(f"Images shape after reshaping: {images.shape}")
+
+                    # Perform encoder inference inside the gradient tape
+                    start_time = time.time()
+                    latent = self.encoder(images, training=True)
+                    end_time = time.time()
+                    print(f"Encoder Inference Time: {end_time - start_time} seconds")
+
+                    # Generate the timestep embeddings (t_emb) for the current step
+                    timesteps = np.arange(1, 1000, 1000 // num_steps)
+                    input_img_noise_t = timesteps[int(len(timesteps) * 0.5)]
+                    latent, alphas, alphas_prev = self.get_starting_parameters(timesteps, batch_size, None, input_image=None, input_img_noise_t=input_img_noise_t)
+
+                    start_time = time.time()
+                    # Diffusion process (multiple steps)
+                    for index, timestep in enumerate(timesteps[::-1]):
+                        print("Diffusion steps", index)
+                        t_emb = self.timestep_embedding(np.array([timestep]))
+                        t_emb = np.repeat(t_emb, batch_size, axis=0)
+
+                        # Perform diffusion model inference outside the gradient tape
+                        unconditional_latent = self.diffusion_model.predict([latent, t_emb, context])
+                        latent = self.diffusion_model.predict([latent, t_emb, context])
+                        e_t = unconditional_latent + 1.0 * (latent - unconditional_latent)
+                        a_t, a_prev = alphas[index], alphas_prev[index]
+                        latent, pred_x0 = self.get_x_prev_and_pred_x0(latent, e_t, index, a_t, a_prev, 1.0, None)
+
+                    end_time = time.time()
+                    print(f"Diffusion Inference Time: {end_time - start_time} seconds")
+
                     outputs = self.decoder(latent, training=True)
                     loss = mse_loss(images, outputs) / accumulation_steps  # Scale loss
 
-                print(loss)
+                    print(loss)
+
+                if tf.math.is_nan(loss):
+                    print(f"Loss is NaN at step {step}, skipping gradient update.")
+                    continue
 
                 scaled_loss = optimizer.get_scaled_loss(loss)
                 gradients = tape.gradient(scaled_loss, self.encoder.trainable_variables + self.decoder.trainable_variables)
                 scaled_gradients = optimizer.get_unscaled_gradients(gradients)
 
+                if any(g is None for g in scaled_gradients):
+                    print(f"Found None gradients at step {step}, skipping gradient update.")
+                    continue
+
                 if accumulated_gradients is None:
                     accumulated_gradients = scaled_gradients
                 else:
-                    accumulated_gradients = [accumulated_gradients[i] + scaled_gradients[i] for i in range(len(scaled_gradients))]
+                    accumulated_gradients = [accumulated_gradients[i] + (scaled_gradients[i] if scaled_gradients[i] is not None else 0) for i in range(len(scaled_gradients))]
 
                 accumulated_loss += loss
 
