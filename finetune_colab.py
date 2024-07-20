@@ -49,11 +49,11 @@ def timestep_embedding(timesteps, dim, max_period=10000):
 epochs = 1
 learning_rate = 1e-3
 batch_size = 1
-num_steps = 10
+num_steps = 100
 
 
 dataset_path = '/content/drive/MyDrive/4x4_grid_images'
 train_dataset = load_dataset(dataset_path)
 
 trainer = StableDiffusion(img_height, img_width, jit_compile=False, download_weights=False)
-trainer.fine_tune(epochs, learning_rate, train_dataset, batch_size, num_steps=10)
+trainer.fine_tune(epochs, learning_rate, train_dataset, batch_size, num_steps=100)
