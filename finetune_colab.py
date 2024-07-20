@@ -40,7 +40,7 @@ def timestep_embedding(timesteps, dim, max_period=10000):
 
 # Example usage
 epochs = 1
-learning_rate = 1e-5
+learning_rate = 1e-3
 batch_size = 1
 num_steps = 10
 
