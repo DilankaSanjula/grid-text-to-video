@@ -322,8 +322,17 @@ class StableDiffusion:
                 # Stop gradients for latent to ensure it's treated as a constant
                 latent = tf.stop_gradient(latent)
 
+                # Check for NaN or Inf in latent after diffusion steps
+                if tf.reduce_any(tf.math.is_nan(latent)) or tf.reduce_any(tf.math.is_inf(latent)):
+                    print(f"NaN or Inf found in latent after diffusion steps at step {step}, skipping.")
+                    continue
+
                 with tf.GradientTape() as tape:
                     outputs = self.decoder(latent, training=True)
+                    if tf.reduce_any(tf.math.is_nan(outputs)) or tf.reduce_any(tf.math.is_inf(outputs)):
+                        print(f"NaN or Inf found in outputs at step {step}, skipping.")
+                        continue
+
                     loss = mse_loss(images, outputs) / accumulation_steps  # Scale loss
 
                 print(f"Loss at step {step}: {loss}")
