@@ -19,7 +19,7 @@ def load_and_preprocess_image(file_path):
     image = image / 255.0  # Normalize to [0, 1]
     return image
 
-def load_dataset(dataset_path, batch_size=8):
+def load_dataset(dataset_path):
     def parse_function(file_path):
         image = load_and_preprocess_image(file_path)
         caption = tf.strings.split(tf.strings.regex_replace(file_path, dataset_path + '/', ''), '.')[0]
@@ -27,7 +27,6 @@ def load_dataset(dataset_path, batch_size=8):
 
     dataset = tf.data.Dataset.list_files(dataset_path + '/*.jpg')
     dataset = dataset.map(parse_function, num_parallel_calls=tf.data.AUTOTUNE)
-    dataset = dataset.batch(batch_size)
     dataset = dataset.prefetch(tf.data.AUTOTUNE)
     return dataset
 
@@ -42,12 +41,12 @@ def timestep_embedding(timesteps, dim, max_period=10000):
 # Example usage
 epochs = 1
 learning_rate = 1e-5
-batch_size = 4
-num_steps = 50
+batch_size = 1
+num_steps = 10
 
 
 dataset_path = '/content/drive/MyDrive/4x4_grid_images'
-train_dataset = load_dataset(dataset_path, batch_size=batch_size)
+train_dataset = load_dataset(dataset_path)
 
 trainer = StableDiffusion(img_height, img_width, jit_compile=False, download_weights=False)
-trainer.fine_tune(epochs, learning_rate, train_dataset, batch_size, num_steps=100)
+trainer.fine_tune(epochs, learning_rate, train_dataset, batch_size, num_steps=10)
