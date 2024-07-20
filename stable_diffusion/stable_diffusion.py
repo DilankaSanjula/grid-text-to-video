@@ -17,7 +17,7 @@ MAX_TEXT_LEN = 77
 mixed_precision.set_global_policy('mixed_float16')
 
 class StableDiffusion:
-    def __init__(self, img_height=1000, img_width=1000, jit_compile=False, download_weights=True):
+    def __init__(self, img_height=512, img_width=512, jit_compile=False, download_weights=True):
         self.img_height = img_height
         self.img_width = img_width
         self.tokenizer = SimpleTokenizer()
