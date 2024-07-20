@@ -214,17 +214,18 @@ class StableDiffusion:
             getattr(self, module_name).set_weights(module_weights)
             print("Loaded %d weights for %s"%(len(module_weights) , module_name))
 
-
     def fine_tune(self, epochs, learning_rate, train_dataset, batch_size=1, num_steps=50, accumulation_steps=8):
         print("batch_size", batch_size)
         # Set mixed precision policy
         mixed_precision.set_global_policy('mixed_float16')
 
-        # Freeze the text encoder, diffusion model, and encoder
+        # Freeze the text encoder and diffusion model
         self.text_encoder.trainable = False
         self.diffusion_model.trainable = False
-        self.encoder.trainable = False
-        self.decoder.trainable = False
+
+        # Unfreeze the encoder and decoder for training
+        self.encoder.trainable = True
+        self.decoder.trainable = True
 
         self.decoder.summary()
 
@@ -243,6 +244,7 @@ class StableDiffusion:
 
             for step, (images, captions) in enumerate(train_dataset.batch(batch_size)):
                 print(step)
+                
                 # Ensure captions are strings
                 captions = [caption.numpy().decode('utf-8') if isinstance(caption.numpy(), bytes) else str(caption.numpy()) for caption in captions]
 
@@ -266,11 +268,21 @@ class StableDiffusion:
                 images = tf.reshape(images, expected_shape)
                 print(f"Images shape after reshaping: {images.shape}")
 
-                # Perform inference outside the gradient tape
+                # Check for NaN or Inf in images
+                if tf.reduce_any(tf.math.is_nan(images)) or tf.reduce_any(tf.math.is_inf(images)):
+                    print(f"NaN or Inf found in images at step {step}, skipping.")
+                    continue
+
+                # Perform encoder inference outside the gradient tape
                 start_time = time.time()
                 latent = self.encoder.predict(images)
                 end_time = time.time()
                 print(f"Encoder Inference Time: {end_time - start_time} seconds")
+
+                # Check for NaN or Inf in latent
+                if tf.reduce_any(tf.math.is_nan(latent)) or tf.reduce_any(tf.math.is_inf(latent)):
+                    print(f"NaN or Inf found in latent at step {step}, skipping.")
+                    continue
 
                 # Generate the timestep embeddings (t_emb) for the current step
                 timesteps = np.arange(1, 1000, 1000 // num_steps)
@@ -284,6 +296,7 @@ class StableDiffusion:
                     t_emb = self.timestep_embedding(np.array([timestep]))
                     t_emb = np.repeat(t_emb, batch_size, axis=0)
 
+                    # Perform diffusion model inference outside the gradient tape
                     unconditional_latent = self.diffusion_model.predict([latent, t_emb, context])
                     latent = self.diffusion_model.predict([latent, t_emb, context])
                     e_t = unconditional_latent + 1.0 * (latent - unconditional_latent)
@@ -293,13 +306,44 @@ class StableDiffusion:
                 end_time = time.time()
                 print(f"Diffusion Inference Time: {end_time - start_time} seconds")
 
-                outputs = self.decoder.predict(latent)
-                loss = mse_loss(images, outputs) / accumulation_steps  # Scale loss
+                # Stop gradients for latent to ensure it's treated as a constant
+                latent = tf.stop_gradient(latent)
 
-                print(loss)
+                with tf.GradientTape() as tape:
+                    outputs = self.decoder(latent, training=True)
+                    loss = mse_loss(images, outputs) / accumulation_steps  # Scale loss
 
-                # Use tf.stop_gradient to prevent gradients from being calculated
-                loss = tf.stop_gradient(loss)
+                print(f"Loss at step {step}: {loss}")
+
+                if tf.math.is_nan(loss):
+                    print(f"Loss is NaN at step {step}, skipping gradient update.")
+                    continue
+
+                scaled_loss = optimizer.get_scaled_loss(loss)
+                gradients = tape.gradient(scaled_loss, self.encoder.trainable_variables + self.decoder.trainable_variables)
+                scaled_gradients = optimizer.get_unscaled_gradients(gradients)
+
+                # Clip gradients to avoid exploding gradients
+                scaled_gradients = [tf.clip_by_value(grad, -1.0, 1.0) if grad is not None else None for grad in scaled_gradients]
+
+                if any(g is None for g in scaled_gradients):
+                    print(f"Found None gradients at step {step}, skipping gradient update.")
+                    continue
+
+                if accumulated_gradients is None:
+                    accumulated_gradients = scaled_gradients
+                else:
+                    accumulated_gradients = [accumulated_gradients[i] + (scaled_gradients[i] if scaled_gradients[i] is not None else 0) for i in range(len(scaled_gradients))]
+
+                accumulated_loss += loss
+
+                if (step + 1) % accumulation_steps == 0:
+                    optimizer.apply_gradients(zip(accumulated_gradients, self.encoder.trainable_variables + self.decoder.trainable_variables))
+                    accumulated_gradients = None
+                    accumulated_loss = 0
+
+                if step % 10 == 0:
+                    print(f"Step {step}, Loss: {tf.reduce_mean(loss).numpy()}")
 
                 if step % 500 == 0:
                     os.makedirs('models', exist_ok=True)
@@ -311,16 +355,20 @@ class StableDiffusion:
                     self.encoder.save(encoder_save_path)
                     self.decoder.save(decoder_save_path)
 
-        # Save the encoder and decoder models at the end of each epoch
-        os.makedirs('models', exist_ok=True)
-        encoder_save_path = os.path.join('models', f'encoder_epoch_{epoch + 1}.h5')
-        decoder_save_path = os.path.join('models', f'decoder_epoch_{epoch + 1}.h5')
+            # Save the encoder and decoder models at the end of each epoch
+            os.makedirs('models', exist_ok=True)
+            encoder_save_path = os.path.join('models', f'encoder_epoch_{epoch + 1}.h5')
+            decoder_save_path = os.path.join('models', f'decoder_epoch_{epoch + 1}.h5')
 
-        self.encoder.save(encoder_save_path)
-        self.decoder.save(decoder_save_path)
-        print(f"Models saved: {encoder_save_path}, {decoder_save_path}")
+            self.encoder.save(encoder_save_path)
+            self.decoder.save(decoder_save_path)
+            print(f"Models saved: {encoder_save_path}, {decoder_save_path}")
 
         print("Fine-tuning complete")
+
+
+
+
 
 
 
