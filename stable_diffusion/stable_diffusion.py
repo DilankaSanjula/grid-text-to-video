@@ -286,8 +286,9 @@ class StableDiffusion:
                         t_emb = self.timestep_embedding(np.array([timestep]))
                         t_emb = np.repeat(t_emb, batch_size, axis=0)
 
-                        unconditional_latent = self.diffusion_model.predict([latent, t_emb, context])
-                        latent = self.diffusion_model.predict([latent, t_emb, context])
+                        # Use tf.stop_gradient to prevent gradient computation for these operations
+                        unconditional_latent = tf.stop_gradient(self.diffusion_model.predict([latent, t_emb, context]))
+                        latent = tf.stop_gradient(self.diffusion_model.predict([latent, t_emb, context]))
                         e_t = unconditional_latent + 1.0 * (latent - unconditional_latent)
                         a_t, a_prev = alphas[index], alphas_prev[index]
                         latent, pred_x0 = self.get_x_prev_and_pred_x0(latent, e_t, index, a_t, a_prev, 1.0, None)
@@ -339,6 +340,7 @@ class StableDiffusion:
             print(f"Models saved: {encoder_save_path}, {decoder_save_path}")
 
         print("Fine-tuning complete")
+
 
 
 def get_models(img_height, img_width, download_weights=True):
