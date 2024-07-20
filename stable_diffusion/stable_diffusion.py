@@ -2,7 +2,7 @@ import os
 import numpy as np
 from tqdm import tqdm
 import math
-
+import time
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import mixed_precision
@@ -215,76 +215,101 @@ class StableDiffusion:
             print("Loaded %d weights for %s"%(len(module_weights) , module_name))
 
 
-    def fine_tune(self, epochs, learning_rate, train_dataset, batch_size=1, num_steps=5):
+
+    def fine_tune(self, epochs, learning_rate,  train_dataset, batch_size=1, num_steps=5, accumulation_steps=4):
+        # Set mixed precision policy
+
+        mixed_precision.set_global_policy('mixed_float16')
 
         # Freeze the text encoder, diffusion model, and encoder
-        for layer in self.text_encoder.layers:
-            layer.trainable = False
-        for layer in self.diffusion_model.layers:
-            layer.trainable = False
-        for layer in self.encoder.layers:
-            layer.trainable = False
+        self.text_encoder.trainable = False
+        self.diffusion_model.trainable = False
+        self.encoder.trainable = False
 
         self.decoder.summary()
 
         optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
         mse_loss = keras.losses.MeanSquaredError()
         print("Starting fine-tuning")
+        print(train_dataset)
+        # Preprocess and cache captions
+        cached_captions = []
+        for images, captions in train_dataset:
+            input_tokens = [self.tokenizer.encode(caption.numpy().decode('utf-8')) for caption in captions]
+            input_tokens = keras.preprocessing.sequence.pad_sequences(input_tokens, maxlen=MAX_TEXT_LEN, padding='post')
+            cached_captions.append(np.array(input_tokens))
 
+        # Optimized data pipeline
+        #train_dataset = train_dataset.batch(batch_size).prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+
+        print(train_dataset)
+        print("came 1")
         for epoch in range(epochs):
             print(f"Epoch {epoch + 1}/{epochs}")
+            accumulated_loss = 0
+            accumulated_gradients = None
+
             for step, (images, captions) in enumerate(train_dataset):
-                with tf.GradientTape() as tape:
-                    # Encode the captions
-                    input_tokens = [self.tokenizer.encode(caption.numpy().decode('utf-8')) for caption in captions]
-                    input_tokens = keras.preprocessing.sequence.pad_sequences(input_tokens, maxlen=MAX_TEXT_LEN, padding='post')
-                    input_tokens = np.array(input_tokens)
-                    pos_ids = np.array(list(range(77)))[None].astype("int32")
-                    pos_ids = np.repeat(pos_ids, batch_size, axis=0)
+                print(step)
+                input_tokens = cached_captions[step]
+                pos_ids = np.array(list(range(77)))[None].astype("int32")
+                pos_ids = np.repeat(pos_ids, batch_size, axis=0)
+                context = self.text_encoder([input_tokens, pos_ids], training=False)
+                # with tf.GradientTape() as tape:
+                #     # Use cached captions
+                #     input_tokens = cached_captions[step]
+                #     pos_ids = np.array(list(range(77)))[None].astype("int32")
+                #     pos_ids = np.repeat(pos_ids, batch_size, axis=0)
+                #     context = self.text_encoder([input_tokens, pos_ids], training=False)
 
-                    context = self.text_encoder([input_tokens, pos_ids], training=True)
+                #     # Time the encoder inference step
+                #     start_time = time.time()
+                #     latent = self.encoder(images, training=False)
+                #     end_time = time.time()
+                #     print(f"Encoder Inference Time: {end_time - start_time} seconds")
 
-                    # Generate latent representations of the input images using the encoder
-                    latent = self.encoder(images, training=True)
+                #     # Generate the timestep embeddings (t_emb) for the current step
+                #     timesteps = np.arange(1, 1000, 1000 // num_steps)
+                #     input_img_noise_t = timesteps[int(len(timesteps) * 0.5)]
+                #     latent, alphas, alphas_prev = self.get_starting_parameters(
+                #         timesteps, batch_size, None, input_image=None, input_img_noise_t=input_img_noise_t
+                #     )
 
-                    # Generate the timestep embeddings (t_emb) for the current step
-                    timesteps = np.arange(1, 1000, 1000 // num_steps)
-                    input_img_noise_t = timesteps[int(len(timesteps) * 0.5)]
+                #     # Diffusion process (multiple steps)
+                #     for index, timestep in enumerate(timesteps[::-1]):
+                #         timesteps = np.array([timestep])
+                #         t_emb = self.timestep_embedding(timesteps)
+                #         t_emb = np.repeat(t_emb, batch_size, axis=0)
+                #         unconditional_latent = self.diffusion_model([latent, t_emb, context], training=False)
+                #         latent = self.diffusion_model([latent, t_emb, context], training=False)
+                #         e_t = unconditional_latent + 1.0 * (latent - unconditional_latent)
+                #         a_t, a_prev = alphas[index], alphas_prev[index]
+                #         latent, pred_x0 = self.get_x_prev_and_pred_x0(
+                #             latent, e_t, index, a_t, a_prev, 1.0, None
+                #         )
 
-                    latent, alphas, alphas_prev = self.get_starting_parameters(
-                        timesteps, batch_size, None, input_image=None, input_img_noise_t=input_img_noise_t
-                    )
-                    print("ok")
+                #     outputs = self.decoder(latent, training=True)
+                #     loss = mse_loss(images, outputs) / accumulation_steps  # Scale loss
 
-                    # Diffusion process (multiple steps)
-                    progbar = tqdm(list(enumerate(timesteps))[::-1])
-                    
-                    for index, timestep in progbar:
-                        print("test")
-                        progbar.set_description(f"{index:3d} {timestep:3d}")
-                        timesteps = np.array([timestep])
-                        t_emb = self.timestep_embedding(timesteps)
-                        t_emb = np.repeat(t_emb, batch_size, axis=0)
+                # gradients = tape.gradient(loss, self.decoder.trainable_variables)
 
-                        unconditional_latent = self.diffusion_model([latent, t_emb, context], training=True)
-                        latent = self.diffusion_model([latent, t_emb, context], training=True)
-                        e_t = unconditional_latent + 1.0 * (latent - unconditional_latent)
-                        a_t, a_prev = alphas[index], alphas_prev[index]
-                        latent, pred_x0 = self.get_x_prev_and_pred_x0(
-                            latent, e_t, index, a_t, a_prev, 1.0, None
-                        )
+                # if accumulated_gradients is None:
+                #     accumulated_gradients = gradients
+                # else:
+                #     accumulated_gradients = [accumulated_gradients[i] + gradients[i] for i in range(len(gradients))]
 
-                    outputs = self.decoder(latent, training=True)
-                    loss = mse_loss(images, outputs)
+                # accumulated_loss += loss
 
-                # Backward pass and optimization
-                gradients = tape.gradient(loss, self.decoder.trainable_variables)
-                optimizer.apply_gradients(zip(gradients, self.decoder.trainable_variables))
+                # if (step + 1) % accumulation_steps == 0:
+                #     optimizer.apply_gradients(zip(accumulated_gradients, self.decoder.trainable_variables))
+                #     accumulated_gradients = None
+                #     accumulated_loss = 0
 
-                if step % 10 == 0:
-                    print(f"Step {step}, Loss: {tf.reduce_mean(loss).numpy()}")
+                #     if step % 10 == 0:
+                #         print(f"Step {step}, Loss: {tf.reduce_mean(loss).numpy()}")
 
-        print("Fine-tuning complete")
+        #print("Fine-tuning complete")
+
 
 
 

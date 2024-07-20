@@ -19,15 +19,17 @@ def load_and_preprocess_image(file_path):
     image = image / 255.0  # Normalize to [0, 1]
     return image
 
-def load_dataset(dataset_path, batch_size=8):
+def load_dataset(dataset_path, batch_size=1):
     def parse_function(file_path):
         image = load_and_preprocess_image(file_path)
         caption = tf.strings.split(tf.strings.regex_replace(file_path, dataset_path + '/', ''), '.')[0]
         return image, caption
 
+
     dataset = tf.data.Dataset.list_files(dataset_path + '/*.jpg')
     dataset = dataset.map(parse_function, num_parallel_calls=tf.data.AUTOTUNE)
     dataset = dataset.batch(batch_size)
+    
     dataset = dataset.prefetch(tf.data.AUTOTUNE)
     return dataset
 
