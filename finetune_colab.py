@@ -55,7 +55,5 @@ num_steps = 10
 dataset_path = '/content/drive/MyDrive/4x4_grid_images'
 train_dataset = load_dataset(dataset_path)
 
-print(train_dataset[0])
-
-# trainer = StableDiffusion(img_height, img_width, jit_compile=False, download_weights=False)
-# trainer.fine_tune(epochs, learning_rate, train_dataset, batch_size, num_steps=10)
+trainer = StableDiffusion(img_height, img_width, jit_compile=False, download_weights=False)
+trainer.fine_tune(epochs, learning_rate, train_dataset, batch_size, num_steps=10)

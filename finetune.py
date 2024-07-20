@@ -65,5 +65,5 @@ for image, caption in train_dataset.take(17):
     print("Image shape:", image.numpy().shape)
     print("Caption:", caption.numpy().decode('utf-8'))
 
-# trainer = StableDiffusion(img_height, img_width, jit_compile=False, download_weights=False)
-# trainer.fine_tune(epochs, learning_rate, train_dataset, batch_size, num_steps=5)
+trainer = StableDiffusion(img_height, img_width, jit_compile=False, download_weights=False)
+trainer.fine_tune(epochs, learning_rate, train_dataset, batch_size, num_steps=5)
