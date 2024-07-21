@@ -4,12 +4,18 @@ import requests
 from pytube import YouTube
 from datetime import timedelta
 import os
+import pickle
 
+# ds = load_dataset("TempoFunk/webvid-10M")
 
-ds = load_dataset("TempoFunk/webvid-10M")
+# train_split = ds["train"]
 
-train_split = ds["train"]
-test_split = ds["test"]
+train_pickle_path = '/content/drive/MyDrive/webvid-10m-dataset/train_split.pkl'
+
+# Load the training split from the pickle file
+with open(train_pickle_path, 'rb') as f:
+    train_split = pickle.load(f)
+print("Training split loaded from pickle file")
 
 print(train_split[0])
 print(train_split[0]['duration'])
@@ -58,40 +64,51 @@ def download_video_test(content_url, file_name):
     except:
         pass
 
+# Path to save the current count
+count_file_path = '/content/drive/MyDrive/webvid-10m-dataset/download_count.txt'
 
+# Initialize the count
 count = 0
-for video in train_split:
+
+# Load count from file if it exists
+if os.path.exists(count_file_path):
+    with open(count_file_path, 'r') as f:
+        count = int(f.read().strip())
+    print(f"Resuming download from count: {count}")
+
+
+for i, video in enumerate(train_split):
+    # Skip videos up to the last processed count
+    if i < count:
+        continue
+
     # Get the duration in seconds
     duration_seconds = duration_to_seconds(video['duration'])
     file_name = video['name']
     print(f"Duration in seconds: {duration_seconds}")
 
-    count += 1
-    print(count)
     if duration_seconds < 20:
         download_video_train(video['contentUrl'], file_name)
-
-        if count > 100000:
-            break
-
-    else:
-        continue
-
-
-count = 0
-for video in test_split:
-    # Get the duration in seconds
-    duration_seconds = duration_to_seconds(video['duration'])
-    file_name = video['name']
-    print(f"Duration in seconds: {duration_seconds}")
-
+    
+    # Update the count
     count += 1
-    print(count)
-    if duration_seconds < 20:
-        download_video_test(video['contentUrl'], file_name)
+    print(f"Downloaded video count: {count}")
 
-        if count > 30000:
-            break
 
-    else:
-        continue
+# count = 0
+# for video in test_split:
+#     # Get the duration in seconds
+#     duration_seconds = duration_to_seconds(video['duration'])
+#     file_name = video['name']
+#     print(f"Duration in seconds: {duration_seconds}")
+
+#     count += 1
+#     print(count)
+#     if duration_seconds < 20:
+#         download_video_test(video['contentUrl'], file_name)
+
+#         if count > 30000:
+#             break
+
+#     else:
+#         continue
