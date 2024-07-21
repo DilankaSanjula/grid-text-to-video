@@ -85,7 +85,6 @@ for i, video in enumerate(train_split):
     # Get the duration in seconds
     duration_seconds = duration_to_seconds(video['duration'])
     file_name = video['name']
-    print(f"Duration in seconds: {duration_seconds}")
 
     if duration_seconds < 20:
         download_video_train(video['contentUrl'], file_name)
