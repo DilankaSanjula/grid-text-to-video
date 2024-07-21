@@ -73,8 +73,8 @@ count = 0
 # Load count from file if it exists and is not empty
 if os.path.exists(video_index_path) and os.path.getsize(video_index_path) > 0:
     with open(video_index_path, 'r') as f:
-        count = int(f.read().strip())
-    print(f"Resuming download from count: {count}")
+        index = int(f.read().strip())
+    print(f"Resuming download from index: {index}")
 
 
 for i, video in enumerate(train_split):
