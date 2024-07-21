@@ -65,14 +65,14 @@ def download_video_test(content_url, file_name):
         pass
 
 # Path to save the current count
-count_file_path = '/content/drive/MyDrive/webvid-10m-dataset/download_count.txt'
+video_index_path = '/content/drive/MyDrive/webvid-10m-dataset/resume_index.txt'
 
 # Initialize the count
 count = 0
 
 # Load count from file if it exists
-if os.path.exists(count_file_path):
-    with open(count_file_path, 'r') as f:
+if os.path.exists(video_index_path):
+    with open(video_index_path, 'r') as f:
         count = int(f.read().strip())
     print(f"Resuming download from count: {count}")
 
@@ -92,6 +92,9 @@ for i, video in enumerate(train_split):
     
     # Update the count
     count += 1
+    with open(video_index_path, 'w') as f:
+        f.write(str(count))
+        
     print(f"Downloaded video count: {count}")
 
 
