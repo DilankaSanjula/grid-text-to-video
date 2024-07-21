@@ -44,7 +44,6 @@ def download_video_train(content_url, file_name):
             with open(file_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=1024):
                     f.write(chunk)
-            print(f"Downloaded video as {file_name}")
         else:
             print("Failed to download video")
     except:
