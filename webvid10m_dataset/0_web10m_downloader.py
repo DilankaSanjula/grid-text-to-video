@@ -67,6 +67,7 @@ for video in train_split:
     print(f"Duration in seconds: {duration_seconds}")
 
     count += 1
+    print(count)
     if duration_seconds < 20:
         download_video_train(video['contentUrl'], file_name)
 
@@ -85,6 +86,7 @@ for video in test_split:
     print(f"Duration in seconds: {duration_seconds}")
 
     count += 1
+    print(count)
     if duration_seconds < 20:
         download_video_test(video['contentUrl'], file_name)
 
