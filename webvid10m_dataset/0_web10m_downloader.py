@@ -70,8 +70,8 @@ video_index_path = '/content/drive/MyDrive/webvid-10m-dataset/resume_index.txt'
 # Initialize the count
 count = 0
 
-# Load count from file if it exists
-if os.path.exists(video_index_path):
+# Load count from file if it exists and is not empty
+if os.path.exists(video_index_path) and os.path.getsize(video_index_path) > 0:
     with open(video_index_path, 'r') as f:
         count = int(f.read().strip())
     print(f"Resuming download from count: {count}")
