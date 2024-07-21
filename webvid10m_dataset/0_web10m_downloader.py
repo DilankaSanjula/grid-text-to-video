@@ -93,8 +93,8 @@ for i, video in enumerate(train_split):
     # Update the count
     count += 1
     with open(video_index_path, 'w') as f:
-        f.write(str(count))
-        
+        f.write(str(i))
+
     print(f"Downloaded video count: {count}")
 
 
