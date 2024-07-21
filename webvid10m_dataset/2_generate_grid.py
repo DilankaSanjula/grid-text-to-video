@@ -44,7 +44,7 @@ def create_grid_image(frames, grid_size=(4, 4), output_path='grid_image.jpg'):
     img.save(output_path)
     print(f"Saved grid image as {output_path}")
 
-def process_videos_in_folder(folder_path, num_frames=16, grid_size=(4, 4), output_folder='4x4_grid_images'):
+def process_videos_in_folder(folder_path, num_frames, grid_size, output_folder):
     os.makedirs(output_folder, exist_ok=True)
     for filename in os.listdir(folder_path):
         try:
@@ -57,6 +57,16 @@ def process_videos_in_folder(folder_path, num_frames=16, grid_size=(4, 4), outpu
         except:
             print("skipped")
 
-# Example usage
-folder_path = 'resized_videos'
-process_videos_in_folder(folder_path)
+folder_resized_train = '/content/drive/MyDrive/webvid-10m-dataset/resized_train_videos'
+folder_resized_test = '/content/drive/MyDrive/webvid-10m-dataset/resized_test_videos'
+
+grid_images_train = '/content/drive/MyDrive/webvid-10m-dataset/train_grid_images'
+grid_images_test = '/content/drive/MyDrive/webvid-10m-dataset/test_grid_images'
+
+
+num_frames = 16
+grid_size=(4, 4)
+
+process_videos_in_folder(folder_resized_train, grid_size, num_frames, grid_images_train)
+
+process_videos_in_folder(folder_resized_test, grid_size, grid_images_test)

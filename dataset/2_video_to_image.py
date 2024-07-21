@@ -50,8 +50,13 @@ test_image_dir = "test_video_to_images/"
 video_file_dir = "MSRVTT/videos/all"
 
 
-for count, train_video in enumerate(train_videos, 1):
+# for count, train_video in enumerate(train_videos, 1):
+#     print(count)
+#     video_name = train_video.strip()
+#     extract_frames(video_name, video_file_dir, train_image_dir)
+
+for count, test_video in enumerate(test_videos, 1):
     print(count)
-    video_name = train_video.strip()
-    extract_frames(video_name, video_file_dir, train_image_dir)
+    video_name = test_video.strip()
+    extract_frames(video_name, video_file_dir, test_image_dir)
 

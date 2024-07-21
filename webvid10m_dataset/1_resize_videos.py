@@ -27,6 +27,14 @@ def process_videos_in_folder(folder_path, output_folder):
             print(f"Error processing {filename}: {e}")
 
 # Example usage
-folder_path = 'webvid-10m'
-output_folder = 'resized_videos'
-process_videos_in_folder(folder_path, output_folder)
+
+save_folder_train = '/content/drive/MyDrive/webvid-10m-dataset/train_videos'
+save_folder_test = '/content/drive/MyDrive/webvid-10m-dataset/test_videos'
+
+output_folder_resized_train = '/content/drive/MyDrive/webvid-10m-dataset/resized_train_videos'
+output_folder_resized_test = '/content/drive/MyDrive/webvid-10m-dataset/resized_test_videos'
+
+# folder_path = 'webvid-10m'
+# output_folder = 'resized_videos'
+process_videos_in_folder(save_folder_train, output_folder_resized_train)
+process_videos_in_folder(save_folder_test, output_folder_resized_test)
